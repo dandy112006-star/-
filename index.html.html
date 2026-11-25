@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Программа тренировок</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #222);
+            padding: 16px;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 26px;
+            margin-bottom: 8px;
+            color: var(--tg-theme-text-color, #222);
+        }
+        .subtitle {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999);
+            margin-bottom: 24px;
+        }
+        .day-card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        }
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .day-title {
+            font-weight: 700;
+            font-size: 18px;
+        }
+        .day-status {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999);
+        }
+        .exercise-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+        }
+        .exercise-item:last-child {
+            border-bottom: none;
+        }
+        .exercise-check {
+            width: 24px;
+            height: 24px;
+            accent-color: var(--tg-theme-button-color, #40a7e3);
+            cursor: pointer;
+        }
+        .exercise-info {
+            flex: 1;
+        }
+        .exercise-name {
+            font-weight: 500;
+            font-size: 16px;
+        }
+        .exercise-details {
+            font-size: 13px;
+            color: var(--tg-theme-hint-color, #999);
+        }
+        .exercise-gif {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            background: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #aaa;
+            overflow: hidden;
+        }
+        .exercise-gif img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .btn-primary {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            background: var(--tg-theme-button-color, #40a7e3);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            margin-top: 20px;
+            transition: opacity 0.2s;
+        }
+        .btn-primary:active {
+            opacity: 0.8;
+        }
+        .loading {
+            text-align: center;
+            padding: 60px 0;
+            color: var(--tg-theme-hint-color);
+        }
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            padding: 40px 0;
+        }
+        .completed-badge {
+            display: inline-block;
+            background: #27ae60;
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <div class="loading">Загрузка программы тренировок...</div>
+    </div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        const app = document.getElementById('app');
+
+        // 1. Инициализация WebApp
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand(); // разворачиваем на весь экран
+
+        // 2. Получаем данные пользователя (можно использовать initDataUnsafe для user_id)
+        const userId = Telegram.WebApp.initDataUnsafe?.user?.id || 'unknown';
+
+        // 3. Функция для получения плана тренировок от вашего бэкенда
+        async function fetchWorkoutPlan() {
+            // Замените URL на ваш реальный эндпоинт
+            const response = await fetch('https://your-api.com/api/workout_plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, initData: Telegram.WebApp.initData })
+            });
+            if (!response.ok) throw new Error('Ошибка загрузки');
+            return await response.json();
+        }
+
+        // 4. Функция отрисовки плана
+        function renderPlan(plan) {
+            const days = plan.days || [];
+
+            // Проверка на пустой план
+            if (days.length === 0) {
+                app.innerHTML = `<div class="error">План тренировок ещё не создан. Вернитесь в бота и нажмите "Создать программу".</div>`;
+                return;
+            }
+
+            const currentDayName = new Date().toLocaleDateString('ru-RU', { weekday: 'long' });
+
+            let html = `
+                <h1>📅 Программа тренировок</h1>
+                <p class="subtitle">Отмечайте выполненные упражнения — прогресс сохранится автоматически</p>
+            `;
+
+            days.forEach((day, dayIndex) => {
+                const isToday = day.name.toLowerCase().includes(currentDayName.split(',')[0].toLowerCase());
+                const completedCount = day.exercises.filter(e => e.completed).length;
+                const totalCount = day.exercises.length;
+                const progress = Math.round((completedCount / totalCount) * 100);
+
+                html += `
+                    <div class="day-card" data-day="${dayIndex}">
+                        <div class="day-header">
+                            <div class="day-title">${day.name} ${isToday ? '🔴' : ''}</div>
+                            <div class="day-status">${completedCount}/${totalCount} выполнено</div>
+                        </div>
+                        <div style="margin-bottom:12px;background:var(--tg-theme-section-separator-color);height:6px;border-radius:3px;">
+                            <div style="width:${progress}%;background:var(--tg-theme-button-color);height:100%;border-radius:3px;"></div>
+                        </div>
+                `;
+
+                day.exercises.forEach((exercise, exIndex) => {
+                    const checked = exercise.completed ? 'checked' : '';
+                    const gifSrc = exercise.gif || '';
+                    html += `
+                        <div class="exercise-item">
+                            <input type="checkbox" class="exercise-check" ${checked} data-day="${dayIndex}" data-ex="${exIndex}">
+                            <div class="exercise-info">
+                                <div class="exercise-name">${exercise.name}</div>
+                                <div class="exercise-details">
+                                    ${exercise.sets} × ${exercise.reps}${exercise.weight ? ` (${exercise.weight} кг)` : ''}
+                                </div>
+                            </div>
+                            <div class="exercise-gif">
+                                ${gifSrc ? `<img src="${gifSrc}" alt="${exercise.name}" loading="lazy">` : 'нет gif'}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+            });
+
+            html += `
+                <button class="btn-primary" id="saveBtn">Сохранить прогресс</button>
+                <p style="text-align:center;margin-top:12px;font-size:13px;color:var(--tg-theme-hint-color)">
+                    Данные синхронизируются с ботом
+                </p>
+            `;
+
+            app.innerHTML = html;
+
+            // Обработчики чекбоксов – обновляем прогресс в реальном времени
+            document.querySelectorAll('.exercise-check').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const dayIndex = parseInt(this.dataset.day);
+                    const exIndex = parseInt(this.dataset.ex);
+                    const dayCard = document.querySelectorAll('.day-card')[dayIndex];
+                    const dayStatus = dayCard.querySelector('.day-status');
+                    const dayExercises = dayCard.querySelectorAll('.exercise-check');
+                    const completed = Array.from(dayExercises).filter(cb => cb.checked).length;
+                    const total = dayExercises.length;
+                    dayStatus.textContent = `${completed}/${total} выполнено`;
+
+                    // Обновляем прогресс-бар
+                    const progressBar = dayCard.querySelector('div > div:first-child');
+                    if (progressBar) {
+                        progressBar.style.width = `${Math.round((completed/total)*100)}%`;
+                    }
+                });
+            });
+
+            // Кнопка «Сохранить прогресс» – отправляем данные в бота
+            document.getElementById('saveBtn').addEventListener('click', function() {
+                const result = collectProgress();
+                // Отправляем через Telegram.WebApp.sendData (закроет Mini App)
+                Telegram.WebApp.sendData(JSON.stringify(result));
+                Telegram.WebApp.close();
+            });
+        }
+
+        // 5. Сбор данных о выполненых упражнениях
+        function collectProgress() {
+            const days = [];
+            const dayCards = document.querySelectorAll('.day-card');
+            dayCards.forEach((card, dayIndex) => {
+                const checkboxes = card.querySelectorAll('.exercise-check');
+                const exercises = [];
+                checkboxes.forEach(cb => {
+                    exercises.push({ completed: cb.checked });
+                });
+                days.push({ dayIndex, exercises });
+            });
+            return { action: 'save_progress', days, user_id: userId };
+        }
+
+        // 6. Основной запуск
+        (async function() {
+            try {
+                // Здесь вы можете:
+                // а) передать данные через initDataUnsafe (если бот отправил план в startup_params)
+                // б) получить их из бэкенда, как показано ниже
+                const params = Telegram.WebApp.initDataUnsafe?.start_param;
+                if (params) {
+                    // Если бот передал JSON план через стартовый параметр (URL-encoded)
+                    const planFromParams = JSON.parse(decodeURIComponent(params));
+                    renderPlan(planFromParams);
+                } else {
+                    // Получаем план от сервера
+                    const plan = await fetchWorkoutPlan();
+                    renderPlan(plan);
+                }
+            } catch (err) {
+                app.innerHTML = `<div class="error">Ошибка загрузки плана. Проверьте соединение и попробуйте снова.<br>${err.message}</div>`;
+                console.error(err);
+            }
+        })();
+    </script>
+</body>
+</html>
